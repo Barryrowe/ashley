@@ -52,7 +52,7 @@ public class Engine {
 	private boolean updating;
 
     /**
-     * Only used in Debug mode
+     * Only used for time reporting in runUpdate with isDebugTrue
      */
 	private ArrayMap<Class<? extends EntitySystem>, Long> updateTimes = new ArrayMap<Class<? extends EntitySystem>, Long>();
 	private Clock clock = new Clock();
@@ -83,9 +83,7 @@ public class Engine {
                         system.update(deltaTime);
                     }
                     long endTime = this.clock.getCurrentTimeStamp();
-                    if (isDebug) {
-                        updateTimes.put(system.getClass(), endTime - startTime);
-                    }
+                    updateTimes.put(system.getClass(), endTime - startTime);
                 }
                 componentOperationHandler.processOperations();
                 entityManager.processPendingOperations();
@@ -220,27 +218,6 @@ public class Engine {
 	 */
 	public void update(float deltaTime){
         this.runUpdate(deltaTime, false);
-//		if (updating) {
-//			throw new IllegalStateException("Cannot call update() on an Engine that is already updating.");
-//		}
-//
-//		updating = true;
-//		ImmutableArray<EntitySystem> systems = systemManager.getSystems();
-//		try {
-//			for (int i = 0; i < systems.size(); ++i) {
-//				EntitySystem system = systems.get(i);
-//
-//				if (system.checkProcessing()) {
-//					system.update(deltaTime);
-//				}
-//
-//				componentOperationHandler.processOperations();
-//				entityManager.processPendingOperations();
-//			}
-//		}
-//		finally {
-//			updating = false;
-//		}
 	}
 
     /**
