@@ -18,6 +18,7 @@ package com.badlogic.ashley.core;
 
 import static org.junit.Assert.*;
 
+import com.badlogic.gdx.utils.ArrayMap;
 import org.junit.Test;
 
 import com.badlogic.ashley.systems.IteratingSystem;
@@ -55,6 +56,16 @@ public class EngineTests {
 		public void entityRemoved (Entity entity) {
 			++removedCount;
 			assertNotNull(entity);
+		}
+	}
+
+	private static class ClockMock extends Clock{
+		long lastTime = 0L;
+
+		@Override
+		public long getCurrentTimeStamp() {
+			lastTime += 1000L;
+			return lastTime;
 		}
 	}
 	
@@ -117,6 +128,22 @@ public class EngineTests {
 			super(updates);
 		}
 	}
+
+    private static class EntitySystemMockSlow extends EntitySystemMock {
+
+        public EntitySystemMockSlow () {
+            super();
+        }
+
+        public EntitySystemMockSlow (Array<Integer> updates) {
+            super(updates);
+        }
+
+        @Override
+        public void update(float deltaTime) {
+            super.update(deltaTime);
+        }
+    }
 
 	private static class EntitySystemMockB extends EntitySystemMock {
 
@@ -319,6 +346,45 @@ public class EngineTests {
 			assertTrue(value >= previous);
 			previous = value;
 		}
+	}
+
+	@Test
+	public void systemUpdateDebug(){
+		Engine engine = new Engine();
+		engine.setClock(new ClockMock());
+		EntitySystemMock systemA = new EntitySystemMockA();
+		EntitySystemMock systemSlow = new EntitySystemMockSlow();
+
+		engine.addSystem(systemA);
+		engine.addSystem(systemSlow);
+
+		int numUpdates = 10;
+
+		for (int i = 0; i < numUpdates; ++i) {
+			assertEquals(i, systemA.updateCalls);
+			assertEquals(i, systemSlow.updateCalls);
+
+			ArrayMap<Class<? extends EntitySystem>, Long> updateTimes = engine.updateDebug(deltaTime);
+
+			assertEquals(i + 1, systemA.updateCalls);
+			assertEquals(i + 1, systemSlow.updateCalls);
+
+			assertEquals(2, updateTimes.size);
+			assertEquals(1000L, (long)updateTimes.get(EntitySystemMockSlow.class));
+		}
+
+		engine.removeSystem(systemSlow);
+
+		for (int i = 0; i < numUpdates; ++i) {
+			assertEquals(i + numUpdates, systemA.updateCalls);
+			assertEquals(numUpdates, systemSlow.updateCalls);
+
+			engine.update(deltaTime);
+
+			assertEquals(i + 1 + numUpdates, systemA.updateCalls);
+			assertEquals(numUpdates, systemSlow.updateCalls);
+		}
+
 	}
 	
 	@Test

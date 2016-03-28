@@ -21,6 +21,7 @@ import com.badlogic.ashley.core.SystemManager.SystemListener;
 import com.badlogic.ashley.signals.Listener;
 import com.badlogic.ashley.signals.Signal;
 import com.badlogic.ashley.utils.ImmutableArray;
+import com.badlogic.gdx.utils.ArrayMap;
 
 /**
  * The heart of the Entity framework. It is responsible for keeping track of {@link Entity} and
@@ -49,6 +50,55 @@ public class Engine {
 	private ComponentOperationHandler componentOperationHandler = new ComponentOperationHandler(new EngineDelayedInformer());
 	private FamilyManager familyManager = new FamilyManager(entityManager.getEntities());	
 	private boolean updating;
+
+    /**
+     * Only used in Debug mode
+     */
+	private ArrayMap<Class<? extends EntitySystem>, Long> updateTimes = new ArrayMap<Class<? extends EntitySystem>, Long>();
+	private Clock clock = new Clock();
+
+    void setClock(Clock clock){
+        this.clock = clock;
+    }
+    public ArrayMap<Class<? extends EntitySystem>, Long> runUpdate(float deltaTime, boolean isDebug){
+        if (updating) {
+            throw new IllegalStateException("Cannot call update() on an Engine that is already updating.");
+        }
+
+        updating = true;
+        ImmutableArray<EntitySystem> systems = systemManager.getSystems();
+        try {
+            for (int i = 0; i < systems.size(); ++i) {
+                EntitySystem system = systems.get(i);
+                //I hate this section of code, but we don't have a great way to
+                //  apply wrapping around each system run, so this is the best
+                //  approach I have found thus far.
+                if(!isDebug){
+                    if (system.checkProcessing()) {
+                        system.update(deltaTime);
+                    }
+                }else {
+                    long startTime = this.clock.getCurrentTimeStamp();
+                    if (system.checkProcessing()) {
+                        system.update(deltaTime);
+                    }
+                    long endTime = this.clock.getCurrentTimeStamp();
+                    if (isDebug) {
+                        updateTimes.put(system.getClass(), endTime - startTime);
+                    }
+                }
+                componentOperationHandler.processOperations();
+                entityManager.processPendingOperations();
+            }
+        }
+        finally {
+            updating = false;
+        }
+
+        return this.updateTimes;
+    }
+
+
 
 
 	/**
@@ -88,6 +138,7 @@ public class Engine {
 	 */
 	public void addSystem(EntitySystem system){
 		systemManager.addSystem(system);
+		updateTimes.put(system.getClass(), 0L);
 	}
 
 	/**
@@ -95,6 +146,7 @@ public class Engine {
 	 */
 	public void removeSystem(EntitySystem system){
 		systemManager.removeSystem(system);
+        updateTimes.removeKey(system.getClass());
 	}
 
 	/**
@@ -162,33 +214,44 @@ public class Engine {
 		familyManager.removeEntityListener(listener);
 	}
 
-	/**
+    /**
 	 * Updates all the systems in this Engine.
 	 * @param deltaTime The time passed since the last frame.
 	 */
 	public void update(float deltaTime){
-		if (updating) {
-			throw new IllegalStateException("Cannot call update() on an Engine that is already updating.");
-		}
-		
-		updating = true;
-		ImmutableArray<EntitySystem> systems = systemManager.getSystems();
-		try {
-			for (int i = 0; i < systems.size(); ++i) {
-				EntitySystem system = systems.get(i);
-				
-				if (system.checkProcessing()) {
-					system.update(deltaTime);
-				}
-	
-				componentOperationHandler.processOperations();
-				entityManager.processPendingOperations();
-			}
-		}
-		finally {
-			updating = false;
-		}	
+        this.runUpdate(deltaTime, false);
+//		if (updating) {
+//			throw new IllegalStateException("Cannot call update() on an Engine that is already updating.");
+//		}
+//
+//		updating = true;
+//		ImmutableArray<EntitySystem> systems = systemManager.getSystems();
+//		try {
+//			for (int i = 0; i < systems.size(); ++i) {
+//				EntitySystem system = systems.get(i);
+//
+//				if (system.checkProcessing()) {
+//					system.update(deltaTime);
+//				}
+//
+//				componentOperationHandler.processOperations();
+//				entityManager.processPendingOperations();
+//			}
+//		}
+//		finally {
+//			updating = false;
+//		}
 	}
+
+    /**
+     * Updates all the systems in this Engine, gathering processing times
+     *  for each system and returning those as a map.
+     * @param deltaTime The time passed since the last frame.
+     * @return a map of the times (in milliseconds) of each system keyed by {@link EntitySystem}
+     */
+    public ArrayMap<Class<? extends EntitySystem>, Long> updateDebug(float deltaTime){
+        return this.runUpdate(deltaTime, true);
+    }
 	
 	protected void addEntityInternal(Entity entity) {
 		entity.componentAdded.add(componentAdded);
